@@ -9,22 +9,17 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <modules>
-        <module>turo-token-issuer</module>
+        <module>components/turo-token-issuer</module>
+        <module>components/turo-claim-provider</module>
     </modules>
 
     <dependencyManagement>
         <dependencies>
-    <!--        <dependency>-->
-    <!--            <groupId>org.wso2.carbon.extension.identity.oauth2.grantType.jwt</groupId>-->
-    <!--            <artifactId>org.wso2.carbon.identity.oauth2.grant.jwt</artifactId>-->
-    <!--            <version>${carbon.identity-oauth2-grant-jwt.version}</version>-->
-    <!--            <exclusions>-->
-    <!--                <exclusion>-->
-    <!--                    <groupId>org.wso2.orbit.com.nimbusds</groupId>-->
-    <!--                    <artifactId>nimbus-jose-jwt</artifactId>-->
-    <!--                </exclusion>-->
-    <!--            </exclusions>-->
-    <!--        </dependency>-->
+            <dependency>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>org.apache.felix.scr.ds-annotations</artifactId>
+                <version>${apache.felix.scr.ds.annotations.version}</version>
+            </dependency>
             <dependency>
                 <groupId>org.wso2.carbon.identity.inbound.auth.oauth2</groupId>
                 <artifactId>org.wso2.carbon.identity.oauth</artifactId>
@@ -82,6 +77,25 @@
         </dependencies>
 
     </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.felix</groupId>
+                    <artifactId>maven-bundle-plugin</artifactId>
+                    <version>${maven.bundle.plugin.version}</version>
+                    <extensions>true</extensions>
+                    <configuration>
+                        <obrRepository>NONE</obrRepository>
+                        <instructions>
+                            <SCM-Revision>${buildNumber}</SCM-Revision>
+                        </instructions>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 
     <repositories>
         <repository>
@@ -164,6 +178,9 @@
         <carbon.identity.version>7.8.3</carbon.identity.version>
         <carbon.kernel.version>4.10.26</carbon.kernel.version>
         <nimbusds.version>9.37.3.wso2v1</nimbusds.version>
+        <apache.felix.scr.ds.annotations.version>1.2.4</apache.felix.scr.ds.annotations.version>
+        <maven.bundle.plugin.version>3.2.0</maven.bundle.plugin.version>
+        <maven.buildnumber.plugin.version>1.4</maven.buildnumber.plugin.version>
     </properties>
 
 </project>

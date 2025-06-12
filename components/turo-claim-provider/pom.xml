@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.turo.is</groupId>
+        <artifactId>turo-extension</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>com.turo.claim.provider</artifactId>
+    <name>Custom Claim Provider</name>
+    <packaging>bundle</packaging>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>org.apache.felix.scr.ds-annotations</artifactId>
+            <version>${apache.felix.scr.ds.annotations.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.identity.framework</groupId>
+            <artifactId>org.wso2.carbon.identity.application.authentication.framework</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.identity.inbound.auth.oauth2</groupId>
+            <artifactId>org.wso2.carbon.identity.oauth</artifactId>
+            <version>${carbon.identity-inbound-auth-oauth.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-bundle-plugin</artifactId>
+                <extensions>true</extensions>
+                <configuration>
+                    <instructions>
+                        <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
+                        <Bundle-Name>${project.artifactId}</Bundle-Name>
+                        <Private-Package>
+                            org.wso2.carbon.identity.organization.management.turo.claim.provider.internal,
+                        </Private-Package>
+                        <Export-Package>
+                            !org.wso2.carbon.identity.organization.management.turo.claim.provider.internal,
+                            org.wso2.carbon.identity.organization.management.turo.claim.provider.*; version="${project.version}"
+                        </Export-Package>
+                        <Import-Package>
+                            org.apache.commons.lang;version="${org.apache.commons.lang.imp.pkg.version.range}",
+                            org.osgi.framework; version="${osgi.framework.imp.pkg.version.range}",
+                            org.osgi.service.component; version="${osgi.service.component.imp.pkg.version.range}",
+                            org.apache.commons.logging;version="${org.apache.commons.logging.imp.pkg.version.range}",
+                            org.wso2.carbon.identity.core.util;version="${carbon.identity.package.import.version.range}",
+                            org.wso2.carbon.identity.oauth2.authz;version="${identity.inbound.auth.oauth.import.version.range}",
+                            org.wso2.carbon.identity.oauth2.dto;version="${identity.inbound.auth.oauth.import.version.range}",
+                            org.wso2.carbon.identity.oauth2.token;version="${identity.inbound.auth.oauth.import.version.range}",
+                            org.wso2.carbon.identity.oauth2;version="${identity.inbound.auth.oauth.import.version.range}",
+                            org.wso2.carbon.identity.oauth2.model;version="${identity.inbound.auth.oauth.import.version.range}",
+                            org.wso2.carbon.identity.oauth2.token.handlers.claims;version="${identity.inbound.auth.oauth.import.version.range}",
+                            org.wso2.carbon.identity.openidconnect.*;version="${identity.inbound.auth.oauth.import.version.range}",
+                            org.wso2.carbon.identity.application.authentication.framework.model;version="${carbon.identity.package.import.version.range}",
+                        </Import-Package>
+                    </instructions>
+                </configuration>
+            </plugin>
+<!--            <plugin>-->
+<!--                <groupId>org.jacoco</groupId>-->
+<!--                <artifactId>jacoco-maven-plugin</artifactId>-->
+<!--                <version>${jacoco.version}</version>-->
+<!--                <executions>-->
+<!--                    <execution>-->
+<!--                        <goals>-->
+<!--                            <goal>prepare-agent</goal>-->
+<!--                        </goals>-->
+<!--                    </execution>-->
+<!--                    <execution>-->
+<!--                        <id>report</id>-->
+<!--                        <phase>test</phase>-->
+<!--                        <goals>-->
+<!--                            <goal>report</goal>-->
+<!--                        </goals>-->
+<!--                    </execution>-->
+<!--                </executions>-->
+<!--            </plugin>-->
+        </plugins>
+    </build>
+
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+</project>
