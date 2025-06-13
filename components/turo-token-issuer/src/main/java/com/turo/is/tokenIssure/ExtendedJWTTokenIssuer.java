@@ -36,6 +36,7 @@ import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oauth2.authz.OAuthAuthzReqMessageContext;
 import org.wso2.carbon.identity.oauth2.dto.OAuth2AccessTokenReqDTO;
 import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
+import org.wso2.carbon.identity.oauth2.model.RequestParameter;
 import org.wso2.carbon.identity.oauth2.token.JWTTokenIssuer;
 import org.wso2.carbon.identity.oauth2.token.OAuthTokenReqMessageContext;
 import org.wso2.carbon.identity.oauth2.token.handlers.claims.JWTAccessTokenClaimProvider;
@@ -69,6 +70,8 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
     private static final String DEFAULT_TYP_HEADER_VALUE = "jwt";
     private static final String JWT_TYP_HEADER_VALUE = "jwt";
     private static final String TURO_ID_ATTRIBUTE = "turo_id";
+
+    private static final String CUSTOM_TOKEN_ATTR_TURO = "is_signup";
     private Algorithm signatureAlgorithm = null;
     private static final Log log = LogFactory.getLog(ExtendedJWTTokenIssuer.class);
 
@@ -118,6 +121,17 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
         OAuth2AccessTokenReqDTO oAuth2AccessTokenReqDTO = request.getOauth2AccessTokenReqDTO();
         String grantType = oAuth2AccessTokenReqDTO.getGrantType();
 
+        RequestParameter[] requestParametersArray = oAuth2AccessTokenReqDTO.getRequestParameters();
+
+        //adding additional properties in oauth2/token request to JWT.
+        for (RequestParameter requestParameter : requestParametersArray) {
+            String propertyKey = requestParameter.getKey();
+
+            if (CUSTOM_TOKEN_ATTR_TURO.equals(propertyKey)) {
+                jwtClaimsSetBuilder.claim(propertyKey, requestParameter.getValue()[0]);
+            }
+        }
+
         //fetch user roles and attach as claim authorities if grant type is client credentials
         if (grantType.equals(GRANT_TYPE_CLIENT_CREDENTIALS)) {
             int tenantId = getTenantId(request, null);
@@ -125,8 +139,6 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
 
             String[] roles = getApplicationUserRoles(tenantId, appClientId);
             jwtClaimsSetBuilder.claim(AUTHORITIES_ATTRIBUTE, roles);
-        } else {
-            //if (jwtClaimsSetBuilder.build().getClaim())
         }
 
         jwtClaimsSet = jwtClaimsSetBuilder.build();

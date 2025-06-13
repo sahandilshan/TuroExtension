@@ -10,7 +10,7 @@ import org.wso2.carbon.identity.openidconnect.ClaimProvider;
 import com.turo.is.claim.provider.TuroClaimProvider;
 
 @Component(
-        name = "identity.turo.claim.provider.component",
+        name = "com.turo.claim.provider.component",
         immediate = true
 )
 public class TuroClaimProviderServiceComponent {

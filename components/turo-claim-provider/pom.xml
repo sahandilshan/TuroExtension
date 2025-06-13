@@ -42,11 +42,12 @@
                         <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
                         <Bundle-Name>${project.artifactId}</Bundle-Name>
                         <Private-Package>
-                            org.wso2.carbon.identity.organization.management.turo.claim.provider.internal,
+                            com.turo.claim.provider.internal,
                         </Private-Package>
                         <Export-Package>
-                            !org.wso2.carbon.identity.organization.management.turo.claim.provider.internal,
-                            org.wso2.carbon.identity.organization.management.turo.claim.provider.*; version="${project.version}"
+                            !com.turo.claim.provider.internal
+                            com.turo.claim.provider.*; version="${project.version}"
+
                         </Export-Package>
                         <Import-Package>
                             org.apache.commons.lang;version="${org.apache.commons.lang.imp.pkg.version.range}",

@@ -181,6 +181,13 @@
         <apache.felix.scr.ds.annotations.version>1.2.4</apache.felix.scr.ds.annotations.version>
         <maven.bundle.plugin.version>3.2.0</maven.bundle.plugin.version>
         <maven.buildnumber.plugin.version>1.4</maven.buildnumber.plugin.version>
+
+        <org.apache.commons.lang.imp.pkg.version.range>[2.6,3)</org.apache.commons.lang.imp.pkg.version.range>
+        <osgi.framework.imp.pkg.version.range>[1.7.0, 2.0.0)</osgi.framework.imp.pkg.version.range>
+        <osgi.service.component.imp.pkg.version.range>[1.2.0, 2.0.0)</osgi.service.component.imp.pkg.version.range>
+        <org.apache.commons.logging.imp.pkg.version.range>[1.2,2)</org.apache.commons.logging.imp.pkg.version.range>
+        <carbon.identity.package.import.version.range>[5.20.0, 8.0.0)</carbon.identity.package.import.version.range>
+        <identity.inbound.auth.oauth.import.version.range>[6.11.66, 8.0.0)</identity.inbound.auth.oauth.import.version.range>
     </properties>
 
 </project>
