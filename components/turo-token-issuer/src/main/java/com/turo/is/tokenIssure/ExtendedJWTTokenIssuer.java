@@ -137,7 +137,7 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
             int tenantId = getTenantId(request, null);
             String appClientId = oAuth2AccessTokenReqDTO.getClientId();
 
-            String[] roles = getApplicationUserRoles(tenantId, appClientId);
+            String[] roles = getUserRoles(tenantId, appClientId);
             jwtClaimsSetBuilder.claim(AUTHORITIES_ATTRIBUTE, roles);
         }
 
@@ -276,7 +276,7 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
         return jwtClaimsSet;
     }
 
-    private String[] getApplicationUserRoles(int tenantId, String username){
+    private String[] getUserRoles(int tenantId, String username){
 
         RealmService realmService = (RealmService) PrivilegedCarbonContext.getThreadLocalCarbonContext()
                 .getOSGiService(RealmService.class, null);
@@ -286,6 +286,11 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
             userRealm = realmService.getTenantUserRealm(tenantId);
             UserStoreManager userStoreManager = userRealm.getUserStoreManager();
             String[] roles = userStoreManager.getRoleListOfUser(username);
+
+            roles = Arrays.stream(roles)
+                    .map(s -> s.startsWith("Internal/") ? s.substring("Internal/".length()) : s)
+                    .toArray(String[]::new);
+
             return roles;
         } catch (UserStoreException e) {
             e.printStackTrace();
