@@ -176,6 +176,7 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
             builder.claim("scope", null);
         }
         Object authoritiesObj = claimSet.getClaims().get("authorities");
+
         if (authoritiesObj != null) {
             if (authoritiesObj instanceof JSONArray) {
                 JSONArray authoritiesArray = (JSONArray) authoritiesObj;
@@ -185,11 +186,22 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
                 authoritiesArray.remove("everyone");
             } else if (authoritiesObj instanceof String) {
                 String authority = authoritiesObj.toString();
-                if (authority.contains("Internal/everyone")) {
+                if (authority.contains("Internal/everyone") || authority.contains("everyone")) {
                     builder.claim("authorities", null);
                 } else {
                     builder.claim("authorities", authority.replace("Internal/", ""));
                 }
+            } else if (authoritiesObj instanceof String[]) {
+                String[] authString = (String[]) authoritiesObj;
+                List<String> list = new ArrayList<>(Arrays.asList(authString));
+
+                // Remove the specific string
+                list.remove("everyone");
+
+                // Convert list back to array (optional)
+                String[] newArray = list.toArray(new String[0]);
+                builder.claim("authorities", newArray);
+
             }
         }
     }
