@@ -185,7 +185,11 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
                 authoritiesArray.remove("everyone");
             } else if (authoritiesObj instanceof String) {
                 String authority = authoritiesObj.toString();
-                builder.claim("authorities", authority.replace("Internal/", ""));
+                if (authority.contains("Internal/everyone")) {
+                    builder.claim("authorities", null);
+                } else {
+                    builder.claim("authorities", authority.replace("Internal/", ""));
+                }
             }
         }
     }
