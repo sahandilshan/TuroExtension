@@ -8,9 +8,10 @@
     <artifactId>turo-extension</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
+
     <modules>
         <module>components/turo-token-issuer</module>
-        <module>components/turo-claim-provider</module>
+<!--        <module>components/turo-claim-provider</module>-->
     </modules>
 
     <dependencyManagement>

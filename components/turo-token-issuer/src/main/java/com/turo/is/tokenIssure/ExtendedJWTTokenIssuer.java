@@ -18,11 +18,17 @@ package com.turo.is.tokenIssure;
  * under the License.
  */
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.nimbusds.jose.*;
 import com.nimbusds.jose.util.Base64URL;
+import com.nimbusds.jose.util.JSONArrayUtils;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.PlainJWT;
 import com.nimbusds.jwt.SignedJWT;
+import net.minidev.json.JSONArray;
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
@@ -60,6 +66,7 @@ import java.util.*;
 
 import static org.wso2.carbon.identity.oauth.common.OAuthConstants.RENEW_TOKEN_WITHOUT_REVOKING_EXISTING_ENABLE_CONFIG;
 import static org.wso2.carbon.identity.oauth.common.OAuthConstants.REQUEST_BINDING_TYPE;
+import static org.wso2.carbon.identity.oauth2.util.OAuth2Util.getAuthzRequestContext;
 import static org.wso2.carbon.identity.oauth2.util.OAuth2Util.getPrivateKey;
 
 /**
@@ -69,16 +76,12 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
 
     private static final String AUTHORIZED_ORGANIZATION_NAME_ATTRIBUTE = "org_name";
     private static final String AUTHORIZED_ORGANIZATION_ID_ATTRIBUTE = "org_id";
-    private static final String TOKEN_BINDING_REF = "binding_ref";
-    private static final String TOKEN_BINDING_TYPE = "binding_type";
     private static final String AUTHORITIES_ATTRIBUTE = "authorities";
     private static final String INTERNAL_ATTRIBUTE = "Internal/";
     private static final String GRANT_TYPE_CLIENT_CREDENTIALS = "client_credentials";
-    private static final String CLIENT_ID = "client_id";
     private static final String DEFAULT_TYP_HEADER_VALUE = "jwt";
     private static final String JWT_TYP_HEADER_VALUE = "jwt";
     private static final String CUSTOM_TOKEN_ATTR_TURO = "is_signup";
-    private static final String SCOPE = "scope";
     private Algorithm signatureAlgorithm = null;
     private static final Log log = LogFactory.getLog(ExtendedJWTTokenIssuer.class);
 
@@ -95,7 +98,7 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
     }
 
     @Override
-    protected String buildJWTToken(OAuthTokenReqMessageContext request) throws IdentityOAuth2Exception{
+    protected String buildJWTToken(OAuthTokenReqMessageContext request) throws IdentityOAuth2Exception {
 
         // Set claims to jwt token.
         JWTClaimsSet jwtClaimsSet = createJWTClaimSet(null, request, request.getOauth2AccessTokenReqDTO()
@@ -138,78 +141,53 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
             jwtClaimsSetBuilder.claim(AUTHORITIES_ATTRIBUTE, roles);
         }
 
+        removeValues(jwtClaimsSetBuilder);
+        modifyAuthoritiesAndScopes(jwtClaimsSetBuilder);
         jwtClaimsSet = jwtClaimsSetBuilder.build();
 
         if (JWSAlgorithm.NONE.getName().equals(signatureAlgorithm.getName())) {
             return new PlainJWT(jwtClaimsSet).serialize();
         }
-
         return signJWT(jwtClaimsSet, request, null);
     }
 
-    @Override
-    protected JWTClaimsSet createJWTClaimSet(OAuthAuthzReqMessageContext authAuthzReqMessageContext,
-                                             OAuthTokenReqMessageContext tokenReqMessageContext,
-                                             String consumerKey) throws IdentityOAuth2Exception {
-        JWTClaimsSet.Builder jwtClaimsSetBuilder = new JWTClaimsSet.Builder();
-        jwtClaimsSetBuilder.jwtID(UUID.randomUUID().toString());
-        jwtClaimsSetBuilder.claim(CLIENT_ID, consumerKey);
 
-        String[] scope = getScope(authAuthzReqMessageContext, tokenReqMessageContext);
-        if (scope != null || scope.length != 0) {
-            jwtClaimsSetBuilder.claim(SCOPE, scope);
-        }
+    private void removeValues(JWTClaimsSet.Builder builder) {
+        builder.issuer(null);
+        builder.subject(null);
+        builder.notBeforeTime(null);
+        builder.audience((String) null);
+        builder.claim("aut", null);
+        builder.claim("azp", null);
+    }
 
-        String tenantDomain = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantDomain();
-        OAuthAppDO oAuthAppDO = null;
+    private void modifyAuthoritiesAndScopes(JWTClaimsSet.Builder builder) {
+        JWTClaimsSet claimSet = builder.build();
+        Object scopeObj = claimSet.getClaims().get("scope");
+        if (scopeObj != null) {
+            String scope = scopeObj.toString();
+            if (StringUtils.isEmpty(scope)) {
+                builder.claim("scope", null);
+            } else {
+                builder.claim("scope", scope.split(" "));
+            }
 
-        try {
-            oAuthAppDO = OAuth2Util.getAppInformationByClientId(consumerKey, tenantDomain);
-        } catch (InvalidOAuthClientException e) {
-            throw new IdentityOAuth2Exception("Error while retrieving app information for clientId: " + consumerKey, e);
-        }
-
-        //setting exp in token
-        long accessTokenLifeTimeInMillis;
-        if (authAuthzReqMessageContext != null) {
-            accessTokenLifeTimeInMillis =
-                    getAccessTokenLifeTimeInMillis(authAuthzReqMessageContext, oAuthAppDO, consumerKey);
         } else {
-            accessTokenLifeTimeInMillis =
-                    getAccessTokenLifeTimeInMillis(tokenReqMessageContext, oAuthAppDO, consumerKey);
+            builder.claim("scope", null);
         }
-
-        long curTimeInMillis = Calendar.getInstance().getTimeInMillis();
-
-        jwtClaimsSetBuilder.expirationTime(calculateAccessTokenExpiryTime(accessTokenLifeTimeInMillis,
-                curTimeInMillis));
-
-
-        JWTClaimsSet jwtClaimsSet;
-
-        // Handle custom claims
-        if (authAuthzReqMessageContext != null) {
-            jwtClaimsSet = handleCustomClaims(jwtClaimsSetBuilder, authAuthzReqMessageContext, oAuthAppDO);
-        } else {
-            jwtClaimsSet = handleCustomClaims(jwtClaimsSetBuilder, tokenReqMessageContext, oAuthAppDO);
-        }
-
-        if (tokenReqMessageContext != null && tokenReqMessageContext.getOauth2AccessTokenReqDTO() != null &&
-                tokenReqMessageContext.getOauth2AccessTokenReqDTO().getAccessTokenExtendedAttributes() != null) {
-            Map<String, String> customClaims =
-                    tokenReqMessageContext.getOauth2AccessTokenReqDTO().getAccessTokenExtendedAttributes()
-                            .getParameters();
-            if (customClaims != null && !customClaims.isEmpty()) {
-                for (Map.Entry<String, String> entry : customClaims.entrySet()) {
-                    jwtClaimsSetBuilder.claim(entry.getKey(), entry.getValue());
+        Object authoritiesObj = claimSet.getClaims().get("authorities");
+        if (authoritiesObj != null) {
+            if (authoritiesObj instanceof JSONArray) {
+                JSONArray authoritiesArray = (JSONArray) authoritiesObj;
+                for (int i = 0; i < authoritiesArray.size(); i++) {
+                    authoritiesArray.set(i, authoritiesArray.get(i).toString().replace("Internal/", ""));
                 }
+                authoritiesArray.remove("everyone");
+            } else if (authoritiesObj instanceof String) {
+                String authority = authoritiesObj.toString();
+                builder.claim("authorities", authority.replace("Internal/", ""));
             }
         }
-
-        // Include token binding.
-        //jwtClaimsSet = handleTokenBinding(jwtClaimsSetBuilder, tokenReqMessageContext);
-
-        return jwtClaimsSet;
     }
 
     @Override
@@ -244,129 +222,6 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
             return signedJWT.serialize();
         } catch (JOSEException e) {
             throw new IdentityOAuth2Exception("Error occurred while signing JWT", e);
-        }
-    }
-
-    private JWTClaimsSet handleTokenBinding(JWTClaimsSet.Builder jwtClaimsSetBuilder,
-                                            OAuthTokenReqMessageContext tokReqMsgCtx) {
-
-        /**
-         * If OAuth.JWT.RenewTokenWithoutRevokingExisting is enabled from configurations, and current token
-         * binding is null,then we will add a new token binding (request binding) to the token binding with
-         * a value of a random UUID.
-         * The purpose of this new token binding type is to add a random value to the token binding so that
-         * "User, Application, Scope, Binding" combination will be unique for each token.
-         * Previously, if a token issue request come for the same combination of "User, Application, Scope, Binding",
-         * the existing JWT token will be revoked and issue a new token. but with this way, we can issue new tokens
-         * without revoking the old ones.
-         *
-         * Add following configuration to deployment.toml file to enable this feature.
-         *     [oauth.jwt.renew_token_without_revoking_existing]
-         *     enable = true
-         *
-         * By default, the allowed grant type for this feature is "client_credentials". If you need to enable for
-         * other grant types, add the following configuration to deployment.toml file.
-         *     [oauth.jwt.renew_token_without_revoking_existing]
-         *     enable = true
-         *     allowed_grant_types = ["client_credentials","password", ...]
-         */
-        boolean renewWithoutRevokingExistingEnabled = Boolean.parseBoolean(IdentityUtil.
-                getProperty(RENEW_TOKEN_WITHOUT_REVOKING_EXISTING_ENABLE_CONFIG));
-
-        if (renewWithoutRevokingExistingEnabled && tokReqMsgCtx != null && tokReqMsgCtx.getTokenBinding() == null) {
-            if (OAuth2ServiceComponentHolder.getJwtRenewWithoutRevokeAllowedGrantTypes()
-                    .contains(tokReqMsgCtx.getOauth2AccessTokenReqDTO().getGrantType())) {
-                String tokenBindingValue = UUID.randomUUID().toString();
-                tokReqMsgCtx.setTokenBinding(
-                        new TokenBinding(REQUEST_BINDING_TYPE, OAuth2Util.getTokenBindingReference(tokenBindingValue),
-                                tokenBindingValue));
-            }
-        }
-
-        if (tokReqMsgCtx != null && tokReqMsgCtx.getTokenBinding() != null) {
-            // Include token binding into the jwt token.
-            String bindingType = tokReqMsgCtx.getTokenBinding().getBindingType();
-            jwtClaimsSetBuilder.claim(TOKEN_BINDING_REF, tokReqMsgCtx.getTokenBinding().getBindingReference());
-            jwtClaimsSetBuilder.claim(TOKEN_BINDING_TYPE, bindingType);
-            if (OAuth2Constants.TokenBinderType.CERTIFICATE_BASED_TOKEN_BINDER.equals(bindingType)) {
-                String cnf = tokReqMsgCtx.getTokenBinding().getBindingValue();
-                if (StringUtils.isNotBlank(cnf)) {
-                    jwtClaimsSetBuilder.claim(OAuthConstants.CNF, Collections.singletonMap(OAuthConstants.X5T_S256,
-                            tokReqMsgCtx.getTokenBinding().getBindingValue()));
-                }
-            }
-        }
-        return jwtClaimsSetBuilder.build();
-    }
-
-    private JWTClaimsSet handleCustomClaims(JWTClaimsSet.Builder jwtClaimsSetBuilder,
-                                            OAuthAuthzReqMessageContext authzReqMessageContext, OAuthAppDO oAuthAppDO)
-            throws IdentityOAuth2Exception {
-
-        CustomClaimsCallbackHandler claimsCallBackHandler = ClaimHandlerUtil.getClaimsCallbackHandler(oAuthAppDO);
-        return claimsCallBackHandler.handleCustomClaims(jwtClaimsSetBuilder, authzReqMessageContext);
-    }
-
-    private JWTClaimsSet handleCustomClaims(JWTClaimsSet.Builder jwtClaimsSetBuilder,
-                                            OAuthTokenReqMessageContext tokenReqMessageContext, OAuthAppDO oAuthAppDO)
-            throws IdentityOAuth2Exception {
-
-        if (tokenReqMessageContext != null && tokenReqMessageContext.isPreIssueAccessTokenActionsExecuted()) {
-            return handleCustomClaimsInPreIssueAccessTokenResponse(jwtClaimsSetBuilder, tokenReqMessageContext);
-        }
-
-        if (tokenReqMessageContext != null && tokenReqMessageContext.getOauth2AccessTokenReqDTO() != null &&
-                shouldSkipOIDCClaimHandling(tokenReqMessageContext)) {
-            /*
-            CC grant and organization switch done from CC grant based token doesn't involve a user and hence skipping
-            OIDC claims those cases.
-             */
-            return jwtClaimsSetBuilder.build();
-        }
-
-        CustomClaimsCallbackHandler claimsCallBackHandler = ClaimHandlerUtil.getClaimsCallbackHandler(oAuthAppDO);
-        return claimsCallBackHandler.handleCustomClaims(jwtClaimsSetBuilder, tokenReqMessageContext);
-    }
-
-    private JWTClaimsSet handleCustomClaimsInPreIssueAccessTokenResponse(JWTClaimsSet.Builder jwtClaimsSetBuilder,
-                                                                         OAuthTokenReqMessageContext
-                                                                                 tokenReqMessageContext) {
-
-        Map<String, Object> customClaims = tokenReqMessageContext.getAdditionalAccessTokenClaims();
-
-        if (customClaims != null) {
-            if (log.isDebugEnabled()) {
-                log.debug("Pre issue access token actions are executed. " +
-                        "Returning the customized claim set from actions. Claims: " + customClaims.keySet());
-            }
-
-            customClaims.forEach(jwtClaimsSetBuilder::claim);
-        }
-
-        return jwtClaimsSetBuilder.build();
-    }
-
-    private boolean shouldSkipOIDCClaimHandling(OAuthTokenReqMessageContext tokenReqMessageContext) {
-
-        String grantType = tokenReqMessageContext.getOauth2AccessTokenReqDTO().getGrantType();
-        // Check if the grant type is CLIENT_CREDENTIALS and the config to skip OIDC claims is enabled.
-        boolean isSkipOIDCClaimsForClientCredentialGrant =
-                OAuthConstants.GrantTypes.CLIENT_CREDENTIALS.equals(grantType) &&
-                        OAuthServerConfiguration.getInstance().isSkipOIDCClaimsForClientCredentialGrant();
-        // Check if the grant type is ORGANIZATION_SWITCH and the user type is APPLICATION
-        boolean isOrgSwitchWithAppUser = OAuthConstants.GrantTypes.ORGANIZATION_SWITCH.equals(grantType) &&
-                OAuthConstants.UserType.APPLICATION.equals(getAuthorizedUserType(null, tokenReqMessageContext));
-
-        return isSkipOIDCClaimsForClientCredentialGrant || isOrgSwitchWithAppUser;
-    }
-
-    private String getAuthorizedUserType(OAuthAuthzReqMessageContext authAuthzReqMessageContext,
-                                         OAuthTokenReqMessageContext tokenReqMessageContext) {
-
-        if (tokenReqMessageContext != null) {
-            return (String) tokenReqMessageContext.getProperty(OAuthConstants.UserType.USER_TYPE);
-        } else {
-            return (String) authAuthzReqMessageContext.getProperty(OAuthConstants.UserType.USER_TYPE);
         }
     }
 
@@ -497,65 +352,5 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
         int tenantId = IdentityTenantUtil.getTenantId(tenantDomain);
 
         return tenantId;
-    }
-
-    private Date calculateAccessTokenExpiryTime(Long accessTokenLifeTimeInMillis, Long curTimeInMillis) {
-
-        Date expirationTime;
-        // When accessTokenLifeTimeInMillis is equal to Long.MAX_VALUE the curTimeInMillis +
-        // accessTokenLifeTimeInMillis can be a negative value
-        if (curTimeInMillis + accessTokenLifeTimeInMillis < curTimeInMillis) {
-            expirationTime = new Date(Long.MAX_VALUE);
-        } else {
-            expirationTime = new Date(curTimeInMillis + accessTokenLifeTimeInMillis);
-        }
-        if (log.isDebugEnabled()) {
-            log.debug("Access token expiry time : " + expirationTime + "ms.");
-        }
-        return expirationTime;
-    }
-
-    private String[] getScope(OAuthAuthzReqMessageContext authAuthzReqMessageContext,
-                            OAuthTokenReqMessageContext tokenReqMessageContext) throws IdentityOAuth2Exception {
-
-        String[] scope;
-        String scopeString = null;
-        if (tokenReqMessageContext != null) {
-            scope = tokenReqMessageContext.getScope();
-        } else {
-            scope = authAuthzReqMessageContext.getApprovedScope();
-        }
-//        if (ArrayUtils.isNotEmpty(scope)) {
-//            scopeString = OAuth2Util.buildScopeString(scope);
-//            if (log.isDebugEnabled()) {
-//                log.debug("Scope exist for the jwt access token with subject " + getAuthenticatedSubjectIdentifier(
-//                        authAuthzReqMessageContext, tokenReqMessageContext) + " and the scope is " + scopeString);
-//            }
-//        }
-        //return scopeString;
-        return scope;
-    }
-
-    private String getAuthenticatedSubjectIdentifier(OAuthAuthzReqMessageContext authAuthzReqMessageContext,
-                                                     OAuthTokenReqMessageContext tokenReqMessageContext) throws IdentityOAuth2Exception {
-
-        AuthenticatedUser authenticatedUser = getAuthenticatedUser(authAuthzReqMessageContext, tokenReqMessageContext);
-        return authenticatedUser.getAuthenticatedSubjectIdentifier();
-    }
-
-    private AuthenticatedUser getAuthenticatedUser(OAuthAuthzReqMessageContext authAuthzReqMessageContext,
-                                                   OAuthTokenReqMessageContext tokenReqMessageContext)
-            throws IdentityOAuth2Exception {
-        AuthenticatedUser authenticatedUser;
-        if (authAuthzReqMessageContext != null) {
-            authenticatedUser = authAuthzReqMessageContext.getAuthorizationReqDTO().getUser();
-        } else {
-            authenticatedUser = tokenReqMessageContext.getAuthorizedUser();
-        }
-
-        if (authenticatedUser == null) {
-            throw new IdentityOAuth2Exception("Authenticated user is null for the request.");
-        }
-        return authenticatedUser;
     }
 }
