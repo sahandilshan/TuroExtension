@@ -1,7 +1,7 @@
 package com.turo.is.tokenIssure;
 
 /*
- * Copyright (c) 2024, WSO2 LLC. (https://www.wso2.com)
+ * Copyright (c) 2025, WSO2 LLC. (https://www.wso2.com)
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -18,7 +18,12 @@ package com.turo.is.tokenIssure;
  * under the License.
  */
 
-import com.nimbusds.jose.*;
+import com.nimbusds.jose.Algorithm;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JOSEObjectType;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.JWSSigner;
 import com.nimbusds.jose.util.Base64URL;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.PlainJWT;
@@ -82,9 +87,20 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
         }
 
         OAuthServerConfiguration config = OAuthServerConfiguration.getInstance();
+        if (config == null) {
+            throw new IdentityOAuth2Exception("OAuthServerConfiguration instance is null");
+        }
+
+        String configuredAlgorithm = config.getSignatureAlgorithm();
+        if (configuredAlgorithm == null) {
+            throw new IdentityOAuth2Exception("Signature algorithm is not configured in OAuthServerConfiguration");
+        }
 
         // Map signature algorithm from identity.xml to nimbus format, this is a one time configuration.
-        signatureAlgorithm = mapSignatureAlgorithm(config.getSignatureAlgorithm());
+        signatureAlgorithm = mapSignatureAlgorithm(configuredAlgorithm);
+        if (signatureAlgorithm == null) {
+            throw new IdentityOAuth2Exception("Failed to map signature algorithm: " + configuredAlgorithm);
+        }
     }
 
     @Override
@@ -104,16 +120,15 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
             Map<String, Object> additionalClaims = claimProvider.getAdditionalClaims(request);
 
             if (additionalClaims != null) {
-                //remove the claim org_name if exists
+                // Remove the claim org_name if exists.
                 additionalClaims.remove(AUTHORIZED_ORGANIZATION_NAME_ATTRIBUTE);
 
-                //rename org_id to turo_id
+                // Rename org_id to turo_id.
                 if (additionalClaims.containsKey(AUTHORIZED_ORGANIZATION_ID_ATTRIBUTE)) {
                     //String orgId = String.valueOf(additionalClaims.get(AUTHORIZED_ORGANIZATION_ID_ATTRIBUTE));
                     String orgId = String.valueOf(additionalClaims.remove(AUTHORIZED_ORGANIZATION_ID_ATTRIBUTE));
                     additionalClaims.put(TURO_ID_ATTRIBUTE, orgId);
                 }
-
                 additionalClaims.forEach(jwtClaimsSetBuilder::claim);
             }
         }
@@ -123,12 +138,17 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
 
         RequestParameter[] requestParametersArray = oAuth2AccessTokenReqDTO.getRequestParameters();
 
-        //adding additional properties in oauth2/token request to JWT.
-        for (RequestParameter requestParameter : requestParametersArray) {
-            String propertyKey = requestParameter.getKey();
+        // Adding additional properties in oauth2/token request to JWT.
+        if (requestParametersArray != null) {
+            for (RequestParameter requestParameter : requestParametersArray) {
+                if (requestParameter != null) {
+                    String propertyKey = requestParameter.getKey();
 
-            if (CUSTOM_TOKEN_ATTR_TURO.equals(propertyKey)) {
-                jwtClaimsSetBuilder.claim(propertyKey, requestParameter.getValue()[0]);
+                    if (CUSTOM_TOKEN_ATTR_TURO.equals(propertyKey) && requestParameter.getValue() != null 
+                            && requestParameter.getValue().length > 0) {
+                        jwtClaimsSetBuilder.claim(propertyKey, requestParameter.getValue()[0]);
+                    }
+                }
             }
         }
 
@@ -163,17 +183,31 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
             jwtClaimsSet = setSignerRealm(tenantDomain, jwtClaimsSet);
 
             Key privateKey = getPrivateKey(tenantDomain, tenantId);
+            if (privateKey == null) {
+                throw new IdentityOAuth2Exception("Private key is null for tenant domain: " + tenantDomain);
+            }
+            
+            if (signatureAlgorithm == null) {
+                throw new IdentityOAuth2Exception("Signature algorithm is not configured");
+            }
+            
             JWSSigner signer = OAuth2Util.createJWSSigner((RSAPrivateKey) privateKey);
             JWSHeader.Builder headerBuilder = new JWSHeader.Builder((JWSAlgorithm) signatureAlgorithm);
+            
             Certificate certificate = OAuth2Util.getCertificate(tenantDomain, tenantId);
-            String certThumbPrint = OAuth2Util.getThumbPrintWithPrevAlgorithm(certificate, false);
+            if (certificate == null) {
+                throw new IdentityOAuth2Exception("Certificate is null for tenant domain: " + tenantDomain);
+            }
+            
+            String certThumbPrint = OAuth2Util.getThumbPrint(certificate);
+
             headerBuilder.keyID(OAuth2Util.getKID(OAuth2Util.getCertificate(tenantDomain, tenantId),
                     (JWSAlgorithm) signatureAlgorithm, tenantDomain));
 
             if (authorizationContext != null && authorizationContext.isSubjectTokenFlow()) {
                 headerBuilder.type(new JOSEObjectType(JWT_TYP_HEADER_VALUE));
             } else {
-                // Set the required "typ" header "at+jwt" for access tokens issued by the issuer
+                // Set the required "typ" header "at+jwt" for access tokens issued by the issuer.
                 headerBuilder.type(new JOSEObjectType(DEFAULT_TYP_HEADER_VALUE));
             }
             headerBuilder.x509CertThumbprint(new Base64URL(certThumbPrint));
@@ -188,7 +222,7 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
     private String resolveSigningTenantDomain(OAuthTokenReqMessageContext tokenContext,
                                               OAuthAuthzReqMessageContext authorizationContext)
             throws IdentityOAuth2Exception {
-
+                 
         String clientID;
         AuthenticatedUser authenticatedUser;
         if (authorizationContext != null) {
@@ -233,7 +267,7 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
                 throw new IdentityOAuth2Exception("Empty ClientId. Cannot resolve the tenant domain to sign the token");
             }
             try {
-                tenantDomain = OAuth2Util.getAppInformationByClientId(clientID).getAppOwner().getTenantDomain();
+                tenantDomain = OAuth2Util.getTenantDomainOfOauthApp(clientID);
             } catch (InvalidOAuthClientException e) {
                 throw new IdentityOAuth2Exception("Error occurred while getting the application information by client" +
                         " id: " + clientID, e);
@@ -253,7 +287,7 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
         }
         if (log.isDebugEnabled()) {
             log.debug(String.format("Tenant domain: %s will be used to sign the token for the authenticated " +
-                    "user: %s", tenantDomain, authenticatedUser.toFullQualifiedUsername()));
+                    "user: %s", tenantDomain, (authenticatedUser != null ? authenticatedUser.toFullQualifiedUsername() : "null")));
         }
         return tenantDomain;
     }
@@ -264,7 +298,7 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
         if (!OAuthServerConfiguration.getInstance().getUseSPTenantDomainValue()) {
             realm.put(OAuthConstants.OIDCClaims.SIGNING_TENANT, tenantDomain);
         }
-        if (realm.size() > 0) {
+        if (!realm.isEmpty()) {
             if (log.isDebugEnabled()) {
                 log.debug("Setting authorized user tenant domain : " + tenantDomain +
                         " used for signing the token to the 'realm' claim of jwt token");
@@ -281,11 +315,29 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
         RealmService realmService = (RealmService) PrivilegedCarbonContext.getThreadLocalCarbonContext()
                 .getOSGiService(RealmService.class, null);
 
-        UserRealm userRealm = null;
+        if (realmService == null) {
+            log.warn("RealmService is null, returning empty roles array");
+            return new String[0];
+        }
+
         try {
-            userRealm = realmService.getTenantUserRealm(tenantId);
+            UserRealm userRealm = realmService.getTenantUserRealm(tenantId);
+            if (userRealm == null) {
+                log.warn("UserRealm is null for tenantId: " + tenantId + ", returning empty roles array");
+                return new String[0];
+            }
+            
             UserStoreManager userStoreManager = userRealm.getUserStoreManager();
+            if (userStoreManager == null) {
+                log.warn("UserStoreManager is null for tenantId: " + tenantId + ", returning empty roles array");
+                return new String[0];
+            }
+            
             String[] roles = userStoreManager.getRoleListOfUser(username);
+            if (roles == null) {
+                log.warn("Roles array is null for username: " + username + ", returning empty roles array");
+                return new String[0];
+            }
 
             roles = Arrays.stream(roles)
                     .map(s -> s.startsWith("Internal/") ? s.substring("Internal/".length()) : s)
@@ -293,7 +345,9 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
 
             return roles;
         } catch (UserStoreException e) {
-            e.printStackTrace();
+            if (log.isDebugEnabled()) {
+                log.debug("Error occurred while fetching user roles for username: " + username, e);
+            }
             return new String[0];
         }
     }
@@ -302,8 +356,6 @@ public class ExtendedJWTTokenIssuer extends JWTTokenIssuer {
                             OAuthAuthzReqMessageContext authorizationContext) throws IdentityOAuth2Exception {
 
         String tenantDomain = resolveSigningTenantDomain(tokenContext, authorizationContext);
-        int tenantId = IdentityTenantUtil.getTenantId(tenantDomain);
-
-        return tenantId;
+        return IdentityTenantUtil.getTenantId(tenantDomain);
     }
 }
