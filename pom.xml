@@ -11,7 +11,8 @@
 
     <modules>
         <module>components/turo-token-issuer</module>
-<!--        <module>components/turo-claim-provider</module>-->
+        <module>components/com.turo.custom.grant.handler</module>
+        <!--        <module>components/turo-claim-provider</module>-->
     </modules>
 
     <dependencyManagement>
